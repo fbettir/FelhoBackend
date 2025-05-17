@@ -29,8 +29,22 @@ app.use('/uploads', express.static(uploadsPath));
 
 // JSON beolvasás
 app.use(express.json());
+const allowedOrigins = [
+  'http://localhost:4200',
+  'https://yellow-mushroom-0b0fe7f03.6.azurestaticapps.net'
+];
+
 app.use(cors({
-  origin: 'https://yellow-mushroom-xyz.z.azurestaticapps.net'
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }));
 // Védett API útvonalak
 app.use('/api/photos', checkJwt, photoRoutes); // ✅ Csak erre kell az auth
