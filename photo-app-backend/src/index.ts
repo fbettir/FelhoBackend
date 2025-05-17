@@ -4,6 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import photoRoutes from './routes/photos';
+import { checkJwt } from './middleware/auth';
 
 dotenv.config(); // tölti a .env változókat
 
@@ -23,7 +24,12 @@ mongoose
     process.exit(1);
   });
 
-app.use(cors());
+const uploadsPath = path.join(__dirname, '..', 'uploads');
+app.use('/uploads', express.static(uploadsPath));
+
+// JSON beolvasás
 app.use(express.json());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use('/api/photos', photoRoutes);
+app.use(cors());
+
+// Védett API útvonalak
+app.use('/api/photos', checkJwt, photoRoutes); // ✅ Csak erre kell az auth
