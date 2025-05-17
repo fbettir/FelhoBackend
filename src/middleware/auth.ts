@@ -1,13 +1,16 @@
 import { expressjwt as jwt } from 'express-jwt';
 import jwksRsa from 'jwks-rsa';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 export const checkJwt = jwt({
   secret: jwksRsa.expressJwtSecret({
     cache: true,
     rateLimit: true,
-    jwksUri: 'https://muerapp.eu.auth0.com/.well-known/jwks.json'
+    jwksUri: `${process.env.AUTH0_DOMAIN}.well-known/jwks.json`,
   }),
-  audience: 'https://felholab-api', // ugyanaz, mint a frontend "audience" mezőben
-  issuer: 'https://muerapp.eu.auth0.com/',
-  algorithms: ['RS256']
+  audience: process.env.AUTH0_AUDIENCE,
+  issuer: process.env.AUTH0_DOMAIN,
+  algorithms: ['RS256'],
 });

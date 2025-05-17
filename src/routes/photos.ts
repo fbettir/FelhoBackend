@@ -8,6 +8,9 @@ import path from "path";
 import fs from "fs";
 import { Photo } from "../models/Photo";
 import { checkJwt } from "../middleware/auth"; 
+
+import { containerClient } from '../services/blob';
+
 const router = express.Router();
 const uploadDir = path.join(__dirname, "..", "..", "uploads");
 
@@ -32,73 +35,70 @@ interface MulterRequest extends Request {
 }
 
 // GET /api/photos – listázás (Auth0 protected)
-router.get("/", checkJwt, async (_req, res) => {
-  const photos = await Photo.find().sort({ uploadDate: -1 });
-  const data = photos.map((p) => ({
-    id: p._id, // fontos, hogy `id` néven szerepeljen a frontendnek
-    name: p.name,
-    uploadDate: p.uploadDate,
-    url: `http://localhost:3000/uploads/${p.filename}`,
-  }));
-  res.json(data);
-});
-
-// POST /api/photos – feltöltés
-router.post("/", checkJwt, upload.single("file"), (async (
-  req: MulterRequest,
-  res: Response
-) => {
-  const name = req.body.name;
-  if (!name || name.length < 40) {
-    return res
-      .status(400)
-      .json({ message: "A kép neve legalább 40 karakter legyen." });
-  }
-
-  if (!req.file) {
-    return res.status(400).json({ message: "Hiányzik a fájl." });
-  }
-
-  const newPhoto = new Photo({
-    filename: req.file.filename,
-    name,
-    uploadDate: new Date(),
-  });
-
-  console.log("Feltöltött fájl:", req.file);
-  console.log("Feltöltött fájl neve:", req.file.filename);
-  console.log("Feltöltött fájl útvonala:", req.file.path);
-  console.log("Feltöltött fájl mérete:", req.file.size);
-  console.log("Feltöltött fájl típusa:", req.file.mimetype);
-
-  await newPhoto.save();
-
-  res.status(201).json({ message: "Feltöltés sikeres." });
-}) as RequestHandler);
-
-router.delete('/:id', checkJwt, (async (req: Request, res: Response) => {
+router.get('/', checkJwt, (async (_req, res) => {
   try {
-    const photo = await Photo.findByIdAndDelete(req.params.id);
+    const blobItems = containerClient.listBlobsFlat();
+    const photos: any[] = [];
 
-    console.log('Törlendő kép:', photo);
-
-    if (!photo) {
-      return res.status(404).json({ message: 'A kép nem található az adatbázisban.' });
+    for await (const blob of blobItems) {
+      photos.push({
+        name: blob.name,
+        uploadDate: blob.properties.createdOn || new Date(), // fallback
+        url: containerClient.getBlockBlobClient(blob.name).url,
+      });
     }
 
-    const filePath = path.join(uploadDir, photo.filename);
-    console.log('Törlendő fájl:', filePath);
-
-    if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
-      console.log('✅ Fájl törölve a fájlrendszerből.');
-    }
-
-    res.json({ message: 'Kép és fájl sikeresen törölve.' });
+    res.json(photos);
   } catch (err) {
-    console.error('❌ Hiba a törlés során:', err);
-    res.status(500).json({ message: 'Hiba történt a törlés során.' });
+    console.error('❌ Hiba a listázás során:', err);
+    res.status(500).json({ message: 'Nem sikerült lekérni a fájlokat.' });
   }
 }) as RequestHandler);
+
+
+
+router.post(
+  '/',
+  upload.single('file'),
+  (async (req: Request, res: Response) => {
+    if (!req.file) return res.status(400).json({ message: 'Hiányzik a fájl.' });
+
+    const original = path.parse(req.file.originalname);
+    const blobName = `${original.name}-${Date.now()}${original.ext}`;
+    const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+
+    await blockBlobClient.uploadData(req.file.buffer, {
+      blobHTTPHeaders: { blobContentType: req.file.mimetype },
+    });
+
+    res.status(201).json({
+      message: 'Feltöltés sikeres',
+      url: blockBlobClient.url,
+      name: req.body.name,
+      uploadDate: new Date(),
+    });
+  }) as RequestHandler
+);
+
+
+router.delete('/:blobName', checkJwt, (async (req, res) => {
+  try {
+    const blobName = req.params.blobName;
+    const blobClient = containerClient.getBlockBlobClient(blobName);
+
+    const exists = await blobClient.exists();
+    if (!exists) {
+      return res.status(404).json({ message: 'A fájl nem található.' });
+    }
+
+    await blobClient.delete();
+    res.json({ message: 'Fájl törölve az Azure Blob Storage-ből.' });
+  } catch (err) {
+    console.error('❌ Törlési hiba:', err);
+    res.status(500).json({ message: 'Nem sikerült törölni a fájlt.' });
+  }
+}) as RequestHandler);
+
+
 
 export default router;

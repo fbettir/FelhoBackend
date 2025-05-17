@@ -29,7 +29,8 @@ app.use('/uploads', express.static(uploadsPath));
 
 // JSON beolvasás
 app.use(express.json());
-app.use(cors());
-
+app.use(cors({
+  origin: 'https://yellow-mushroom-xyz.z.azurestaticapps.net'
+}));
 // Védett API útvonalak
 app.use('/api/photos', checkJwt, photoRoutes); // ✅ Csak erre kell az auth
