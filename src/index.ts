@@ -6,11 +6,12 @@ import path from 'path';
 import photoRoutes from './routes/photos';
 import { checkJwt } from './middleware/auth';
 
-dotenv.config(); // tölti a .env változókat
+dotenv.config(); // .env változók betöltése
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// MongoDB kapcsolódás
 mongoose
   .connect(process.env.MONGO_URI!)
   .then(() => {
@@ -24,13 +25,15 @@ mongoose
     process.exit(1);
   });
 
+// Alapbeállítások
+app.use(express.json());
+
+// Statikus fájlok kiszolgálása
 const uploadsPath = path.join(__dirname, '..', 'uploads');
 app.use('/uploads', express.static(uploadsPath));
 
-// JSON beolvasás
-app.use(express.json());
+// CORS
 const allowedOrigins = [
-  'http://localhost:4200',
   'https://yellow-mushroom-0b0fe7f03.6.azurestaticapps.net'
 ];
 
@@ -46,5 +49,11 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
-// Védett API útvonalak
-app.use('/api/photos', checkJwt, photoRoutes); // ✅ Csak erre kell az auth
+
+// Egyszerű teszt route frontendhez
+app.post('/upload', (req, res) => {
+  res.status(200).json({ message: 'Upload endpoint elérhető.' });
+});
+
+// Védett API útvonal
+app.use('/api/photos', checkJwt, photoRoutes);

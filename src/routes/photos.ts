@@ -18,17 +18,10 @@ if (!fs.existsSync(uploadDir)) {
   fs.mkdirSync(uploadDir);
 }
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, uploadDir),
-  filename: (_req, file, cb) => {
-    const timestamp = Date.now();
-    const ext = path.extname(file.originalname);
-    const base = path.basename(file.originalname, ext);
-    cb(null, `${base}-${timestamp}${ext}`);
-  },
-});
+const storage = multer.memoryStorage(); // <-- fájl nem kerül lemezre, csak memóriába
 
-const upload = multer({ storage });
+
+const upload = multer({ storage: multer.memoryStorage() }); // buffer elérhető lesz
 
 interface MulterRequest extends Request {
   file?: Express.Multer.File;
@@ -56,7 +49,6 @@ router.get('/', checkJwt, (async (_req, res) => {
 }) as RequestHandler);
 
 
-
 router.post(
   '/',
   upload.single('file'),
@@ -67,7 +59,7 @@ router.post(
     const blobName = `${original.name}-${Date.now()}${original.ext}`;
     const blockBlobClient = containerClient.getBlockBlobClient(blobName);
 
-    await blockBlobClient.uploadData(req.file.buffer, {
+    await blockBlobClient.uploadData(req.file.buffer, { // ✅ most már működik
       blobHTTPHeaders: { blobContentType: req.file.mimetype },
     });
 
@@ -79,6 +71,7 @@ router.post(
     });
   }) as RequestHandler
 );
+
 
 
 router.delete('/:blobName', checkJwt, (async (req, res) => {
